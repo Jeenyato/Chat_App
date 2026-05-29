@@ -1,19 +1,941 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>شات مباشر</title>
-<link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>مدير ملفات البحث</title>
+<script type="module">import 'https://unpkg.com/mathlive';</script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --blue: #2563eb;
+    --blue-h: #1d4ed8;
+    --green: #16a34a;
+    --yellow: #ca8a04;
+    --red: #dc2626;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --radius: 12px;
+    --radius-sm: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    font-family:'Cairo',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+}
+
+/* ── LOADER ── */
+#loader {
+    position:fixed; inset:0;
+    background:var(--bg);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:9999; transition:opacity .4s;
+}
+.spinner {
+    width:52px; height:52px;
+    border:4px solid var(--border);
+    border-top-color:var(--blue);
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+    margin-bottom:16px;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.loader-text { color:var(--muted); font-size:15px; }
+
+/* ── HEADER ── */
+.app-header {
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    padding:14px 16px;
+    position:sticky; top:0; z-index:100;
+}
+.header-top {
+    display:flex; align-items:center;
+    justify-content:space-between;
+    margin-bottom:12px;
+}
+.header-title {
+    font-size:18px; font-weight:700;
+    color:var(--text);
+}
+.header-title span { color:var(--blue); }
+
+/* ── SEARCH ── */
+.search-wrap {
+    position:relative; margin-bottom:10px;
+}
+.search-wrap svg {
+    position:absolute; right:12px; top:50%;
+    transform:translateY(-50%);
+    color:var(--muted); pointer-events:none;
+    width:18px; height:18px;
+}
+#searchInput {
+    width:100%; background:var(--surface2);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    color:var(--text); font-family:'Cairo',sans-serif;
+    font-size:14px; padding:10px 40px 10px 14px;
+    outline:none; transition:border-color .2s;
+}
+#searchInput:focus { border-color:var(--blue); }
+#searchInput::placeholder { color:var(--muted); }
+
+/* ── ACTION BUTTONS ── */
+.actions-row {
+    display:flex; gap:8px; flex-wrap:wrap;
+}
+.btn {
+    flex:1; min-width:80px;
+    background:var(--blue);
+    color:white; border:none;
+    border-radius:var(--radius-sm);
+    font-family:'Cairo',sans-serif;
+    font-size:13px; font-weight:600;
+    padding:9px 8px; cursor:pointer;
+    transition:background .2s, transform .1s;
+    white-space:nowrap;
+}
+.btn:hover { background:var(--blue-h); }
+.btn:active { transform:scale(.97); }
+.btn.green { background:var(--green); }
+.btn.green:hover { background:#15803d; }
+
+/* ── FILE COUNT ── */
+.file-count {
+    font-size:13px; color:var(--muted);
+    padding:10px 16px 0;
+}
+
+/* ── CARDS GRID ── */
+#cards {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap:12px;
+    padding:12px 16px 80px;
+}
+@media(max-width:400px) {
+    #cards { grid-template-columns:1fr; }
+}
+.card {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px;
+    transition:border-color .2s, transform .15s;
+}
+.card:hover { border-color:#58a6ff44; transform:translateY(-1px); }
+.card-name {
+    font-size:15px; font-weight:600;
+    margin-bottom:6px;
+    word-break:break-all;
+    display:flex; align-items:center; gap:8px;
+}
+.file-icon { font-size:20px; flex-shrink:0; }
+.card-meta {
+    font-size:12px; color:var(--muted); margin-bottom:12px;
+    display:flex; gap:12px; flex-wrap:wrap;
+}
+.card-actions {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:6px;
+}
+.card-btn {
+    padding:7px 4px;
+    border:none; border-radius:var(--radius-sm);
+    font-family:'Cairo',sans-serif;
+    font-size:12px; font-weight:600;
+    cursor:pointer; transition:opacity .2s, transform .1s;
+    color:white;
+}
+.card-btn:active { transform:scale(.95); }
+.card-btn:hover { opacity:.85; }
+.cb-dl  { background:#0f766e; }
+.cb-rn  { background:var(--yellow); }
+.cb-del { background:var(--red); }
+.cb-op  { background:var(--blue); }
+
+/* ── FLOATING MENU ── */
+#floatingMenu {
+    position:fixed; bottom:80px; left:50%;
+    transform:translateX(-50%);
+    background:var(--surface2);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px;
+    width:calc(100% - 32px); max-width:360px;
+    display:none; z-index:999;
+    box-shadow:0 8px 32px #00000066;
+    animation:slideUp .2s ease;
+}
+@keyframes slideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(10px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+.menu-item {
+    width:100%; padding:13px 16px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius-sm); color:var(--text);
+    font-family:'Cairo',sans-serif; font-size:14px;
+    font-weight:600; cursor:pointer; margin-bottom:8px;
+    display:flex; align-items:center; gap:10px;
+    transition:background .2s;
+}
+.menu-item:last-child { margin-bottom:0; }
+.menu-item:hover { background:var(--border); }
+.menu-item span { font-size:20px; }
+
+/* ── UPLOAD ── */
+#uploadLabel {
+    display:flex; align-items:center; justify-content:center;
+    gap:8px; padding:10px;
+    background:var(--surface2);
+    border:1px dashed var(--border);
+    border-radius:var(--radius-sm);
+    cursor:pointer; font-size:13px;
+    color:var(--muted); transition:border-color .2s;
+    margin:0 16px 8px;
+}
+#uploadLabel:hover { border-color:var(--blue); color:var(--text); }
+#upload { display:none; }
+
+/* ── TEXT EDITOR ── */
+#content2 {
+    display:none; flex-direction:column;
+    height:100vh; overflow:hidden;
+}
+.editor-header {
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    padding:10px 12px;
+    display:flex; gap:8px; flex-wrap:wrap;
+    align-items:center;
+}
+.editor-header-title {
+    font-size:15px; font-weight:700;
+    padding:0 8px; color:var(--text);
+    flex:1; min-width:100px;
+}
+.ebtn {
+    padding:8px 12px; border:none;
+    border-radius:var(--radius-sm); font-family:'Cairo',sans-serif;
+    font-size:13px; font-weight:600;
+    cursor:pointer; color:white;
+    transition:opacity .2s;
+}
+.ebtn:hover { opacity:.85; }
+.ebtn-eq  { background:#7c3aed; }
+.ebtn-sav { background:var(--green); }
+.ebtn-clr { background:var(--red); }
+.ebtn-und { background:var(--yellow); }
+#editor {
+    flex:1; padding:18px;
+    outline:none; overflow:auto;
+    font-size:17px; line-height:1.8;
+    background:var(--bg);
+}
+#editor:empty::before {
+    content:"ابدأ الكتابة هنا...";
+    color:var(--muted);
+}
+.equation {
+    display:inline-block; padding:4px 8px; margin:0 3px;
+    background:var(--surface2); border-radius:var(--radius-sm);
+    border:1px solid var(--border);
+}
+#equationPanel {
+    background:var(--surface); padding:16px;
+    border-top:1px solid var(--border); display:none;
+}
+math-field {
+    width:100%; font-size:26px;
+    padding:10px; border-radius:var(--radius-sm);
+    margin-bottom:10px;
+}
+
+/* ── VIEWERS ── */
+.viewer {
+    position:fixed; inset:0;
+    background:var(--bg);
+    z-index:9999; display:none;
+    flex-direction:column;
+}
+.viewer-header {
+    height:56px; padding:0 12px;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:10px;
+}
+.viewer-header .btn { flex:0 0 auto; min-width:unset; width:auto; padding:8px 16px; }
+.viewer-body {
+    flex:1; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    padding:10px;
+}
+#pdfFrame { width:100%; height:100%; border:none; border-radius:var(--radius); background:white; }
+#viewedImage { max-width:100%; max-height:100%; object-fit:contain; border-radius:var(--radius); }
+.viewer-body video { width:100%; max-height:100%; border-radius:var(--radius); background:black; }
+.viewer-body audio { width:100%; }
+
+/* ── CSV VIEWER ── */
+#csvviewer .viewer-header { flex-wrap:wrap; height:auto; padding:8px 12px; gap:6px; }
+#csvviewer .viewer-header .btn { font-size:13px; padding:8px 12px; }
+.csv-body { flex:1; overflow:auto; padding:10px; background:var(--bg); }
+.tablewrapper { width:100%; overflow:auto; border-radius:var(--radius); border:1px solid var(--border); }
+.realtable { width:100%; border-collapse:collapse; background:var(--surface); color:var(--text); }
+.realtable thead { position:sticky; top:0; z-index:10; }
+.realtable th {
+    background:var(--surface2); color:var(--text);
+    padding:11px 12px; text-align:center;
+    border-bottom:2px solid var(--border);
+    white-space:nowrap; font-size:13px; font-weight:700;
+}
+.realtable td {
+    padding:10px 12px;
+    border-bottom:1px solid var(--border);
+    text-align:center; white-space:nowrap;
+    font-size:13px;
+}
+.realtable tr:hover td { background:var(--surface2); }
+.realtable tbody tr:nth-child(even) { background:#0d1117aa; }
+[contenteditable]:focus { outline:2px solid var(--blue); outline-offset:1px; border-radius:4px; }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+    grid-column:1/-1;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:60px 20px;
+    color:var(--muted); text-align:center;
+}
+.empty-icon { font-size:48px; margin-bottom:16px; }
+.empty-text { font-size:16px; }
+
+/* ── BOTTOM FAB ── */
+#mainBtn {
+    position:fixed; bottom:20px; left:50%;
+    transform:translateX(-50%);
+    background:var(--blue); color:white;
+    border:none; border-radius:50px;
+    font-family:'Cairo',sans-serif;
+    font-size:15px; font-weight:700;
+    padding:14px 32px; cursor:pointer;
+    box-shadow:0 4px 20px #2563eb55;
+    z-index:200; transition:background .2s, transform .15s;
+    white-space:nowrap;
+}
+#mainBtn:hover { background:var(--blue-h); }
+#mainBtn:active { transform:translateX(-50%) scale(.96); }
+</style>
 </head>
 <body>
-<div class="app">
-<div class="top">💬 شات مباشر</div>
-<div id="messages"></div>
-<div class="send">
-<input id="name" placeholder="اسمك">
-<input id="text" placeholder="اكتب رسالة">
-<button onclick="send()">إرسال</button>
-</div></div>
-<!-- <script type="text/javascript" src="firebase.js"></script> -->
-<script type="module" src="https://raw.githubusercontent.com/Jeenyato/Chat_App/refs/heads/main/app.js"></script>
-</body></html>
+
+<!-- LOADER -->
+<div id="loader">
+    <div class="spinner"></div>
+    <div class="loader-text">جاري التحميل...</div>
+</div>
+
+<!-- ══ MAIN CONTENT ══ -->
+<div id="content1" style="display:none; flex-direction:column; min-height:100vh;">
+
+    <div class="app-header">
+        <div class="header-top">
+            <div class="header-title">📁 ملفات <span>البحث</span></div>
+            <div style="font-size:12px;color:var(--muted)" id="statusText"></div>
+        </div>
+        <div class="search-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="ابحث في الملفات...">
+        </div>
+        <div class="actions-row">
+            <button class="btn" id="login">🔑 دخول</button>
+            <button class="btn" id="refresh">🔄 تحديث</button>
+        </div>
+    </div>
+
+    <label id="uploadLabel" for="upload">
+        <span>📤</span> رفع ملف
+    </label>
+    <input type="file" id="upload">
+
+    <div class="file-count" id="fileCount"></div>
+    <div id="cards"></div>
+
+    <!-- FAB -->
+    <button id="mainBtn">＋ إنشاء ملف</button>
+
+    <!-- Floating Menu -->
+    <div id="floatingMenu">
+        <button class="menu-item" id="edit_emw_file_text">
+            <span>📝</span> ملف نصوص ومعادلات
+        </button>
+        <button class="menu-item" id="edit_emw_file_csv">
+            <span>📊</span> ملف جداول بيانات
+        </button>
+        <button class="menu-item" id="edit_emw_file_link">
+            <span>🔗</span> ملف رابط خارجي
+        </button>
+    </div>
+</div>
+
+<!-- ══ TEXT EDITOR ══ -->
+<div id="content2">
+    <div class="editor-header">
+        <span class="editor-header-title">✏️ محرر النصوص</span>
+        <button class="ebtn ebtn-eq"  onclick="openEquation()">∑ معادلة</button>
+        <button class="ebtn ebtn-sav" onclick="savealldata()">💾 حفظ</button>
+        <button class="ebtn ebtn-und" onclick="undothat()">↩ تراجع</button>
+        <button class="ebtn ebtn-clr" onclick="clearEditor()">🗑 مسح</button>
+    </div>
+    <div id="editor" contenteditable="true"></div>
+    <div id="equationPanel">
+        <math-field id="mathInput">\frac{a}{b}</math-field>
+        <button class="ebtn ebtn-sav" style="width:100%;padding:12px;" onclick="insertEquation()">
+            ✅ إدراج المعادلة
+        </button>
+    </div>
+</div>
+
+<!-- ══ VIEWERS ══ -->
+<div id="pdfviewer" class="viewer">
+    <div class="viewer-header">
+        <button class="btn" onclick="closeViewer('pdfviewer')">⬅ رجوع</button>
+        <span style="color:var(--muted);font-size:13px;" id="pdfName"></span>
+    </div>
+    <div class="viewer-body">
+        <iframe id="pdfFrame" src="" frameborder="0"></iframe>
+    </div>
+</div>
+
+<div id="imageviewer" class="viewer">
+    <div class="viewer-header">
+        <button class="btn" onclick="closeViewer('imageviewer')">⬅ رجوع</button>
+    </div>
+    <div class="viewer-body" style="overflow:auto;">
+        <img id="viewedImage" src="" alt="الصورة">
+    </div>
+</div>
+
+<div id="videoviewer" class="viewer">
+    <div class="viewer-header">
+        <button class="btn" onclick="closeViewer('videoviewer')">⬅ رجوع</button>
+    </div>
+    <div class="viewer-body">
+        <video id="viewedVideo" controls></video>
+    </div>
+</div>
+
+<div id="audioviewer" class="viewer">
+    <div class="viewer-header">
+        <button class="btn" onclick="closeViewer('audioviewer')">⬅ رجوع</button>
+    </div>
+    <div class="viewer-body">
+        <audio id="viewedAudio" controls></audio>
+    </div>
+</div>
+
+<div id="csvviewer" class="viewer">
+    <div class="viewer-header">
+        <button class="btn" style="background:var(--red);" onclick="closeViewer('csvviewer')">⬅ رجوع</button>
+        <button class="btn green" onclick="saveCSV()">💾 حفظ</button>
+        <button class="btn" style="background:var(--yellow);" id="addRowBtn">＋ صف</button>
+        <button class="btn" style="background:var(--yellow);" id="addColBtn">＋ عمود</button>
+    </div>
+    <div class="viewer-body csv-body">
+        <div id="csvTable"></div>
+    </div>
+</div>
+
+<script>
+const CLIENT_ID = "1059917357836-7oop4rls49pto8fil203qkgab9vpe2eo.apps.googleusercontent.com"
+const API_KEY   = "AIzaSyDnnnWIj9RUJPFYj4qztAZD1B65wc2N8_k"
+const DISCOVERY = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
+const SCOPES    = "https://www.googleapis.com/auth/drive"
+
+let token       = localStorage.getItem("drive_token") || ""
+let tokenExpire = localStorage.getItem("drive_token_expire") || 0
+let tokenClient = null
+let googleReady = false
+let gapiReady   = false
+let initialized = false
+let allFiles    = []
+let savedRange  = null
+
+const menu        = document.getElementById("floatingMenu")
+const mainBtn     = document.getElementById("mainBtn")
+const editor      = document.getElementById("editor")
+const cards       = document.getElementById("cards")
+const searchInput = document.getElementById("searchInput")
+const fileCount   = document.getElementById("fileCount")
+const statusText  = document.getElementById("statusText")
+
+// ── INIT ──────────────────────────────────────────────
+function ready() {
+    if (googleReady && gapiReady && !initialized) {
+        initialized = true
+        initialize()
+    }
+}
+function googleLoaded() { googleReady = true; ready() }
+function gapiLoaded()   { gapiReady = true; gapi.load("client", ready) }
+
+async function initialize() {
+    try {
+        await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY] })
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: (resp) => {
+                if (resp.error) return
+                token = resp.access_token
+                const exp = Date.now() + (resp.expires_in * 1000)
+                tokenExpire = exp
+                localStorage.setItem("drive_token", token)
+                localStorage.setItem("drive_token_expire", exp)
+                gapi.client.setToken({ access_token: token })
+                loadFiles()
+            }
+        })
+        if (token && Date.now() < tokenExpire) {
+            gapi.client.setToken({ access_token: token })
+            loadFiles()
+        }
+        setTimeout(() => {
+            document.getElementById("loader").style.display = "none"
+            document.getElementById("content1").style.display = "flex"
+        }, 400)
+    } catch(e) {
+        console.error(e)
+        alert("فشل التهيئة")
+    }
+}
+
+// ── LOAD ALL FILES ────────────────────────────────────
+async function loadFiles() {
+    if (!token) return
+    allFiles = []
+    showLoader(true)
+    statusText.textContent = "جاري التحميل..."
+    try {
+        await loadPage(null)
+        render(allFiles)
+    } catch(e) {
+        console.error(e)
+    }
+    showLoader(false)
+    statusText.textContent = ""
+}
+
+async function loadPage(pageToken) {
+    const params = {
+        pageSize: 1000,
+        fields: "nextPageToken,files(id,name,size,modifiedTime)"
+    }
+    if (pageToken) params.pageToken = pageToken
+    const r = await gapi.client.drive.files.list(params)
+    allFiles = [...allFiles, ...r.result.files]
+    statusText.textContent = `تم تحميل ${allFiles.length} ملف...`
+    if (r.result.nextPageToken) {
+        await loadPage(r.result.nextPageToken)
+    }
+}
+
+// ── SEARCH ────────────────────────────────────────────
+searchInput.addEventListener("input", () => {
+    const q = searchInput.value.toLowerCase().trim()
+    const filtered = q
+        ? allFiles.filter(f => f.name.toLowerCase().includes(q))
+        : allFiles
+    render(filtered)
+})
+
+// ── RENDER ────────────────────────────────────────────
+function getFileIcon(name) {
+    const n = name.toLowerCase()
+    if (n.endsWith(".pdf"))  return "📄"
+    if (n.match(/\.(png|jpg|jpeg|svg|gif|webp)$/)) return "🖼️"
+    if (n.match(/\.(mp4|webm|mov|avi)$/)) return "🎬"
+    if (n.match(/\.(mp3|wav|ogg|m4a)$/)) return "🎵"
+    if (n.endsWith(".csv"))  return "📊"
+    if (n.endsWith(".link")) return "🔗"
+    if (n.match(/\.(txt|html?)$/)) return "📝"
+    return "📁"
+}
+
+function render(files) {
+    cards.innerHTML = ""
+    fileCount.textContent = `${files.length} ملف`
+
+    if (!files.length) {
+        cards.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <div class="empty-text">لا توجد ملفات</div>
+        </div>`
+        return
+    }
+
+    files.forEach(file => {
+        const safeId   = escapeAttr(file.id)
+        const safeName = escapeAttr(file.name)
+        const c = document.createElement("div")
+        c.className = "card"
+        c.innerHTML = `
+        <div class="card-name">
+            <span class="file-icon">${getFileIcon(file.name)}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${safeName}">${escapeHTML(file.name)}</span>
+        </div>
+        <div class="card-meta">
+            <span>${format(file.size)}</span>
+            <span>${new Date(file.modifiedTime).toLocaleDateString('ar-EG')}</span>
+        </div>
+        <div class="card-actions">
+            <button class="card-btn cb-dl"  onclick="downloadFile('${safeId}')">تحميل</button>
+            <button class="card-btn cb-rn"  onclick="renameFile('${safeId}','${safeName}')">تسمية</button>
+            <button class="card-btn cb-del" onclick="deleteFile('${safeId}')">حذف</button>
+            <button class="card-btn cb-op"  onclick="openfile('${safeId}','${safeName}')">فتح</button>
+        </div>`
+        cards.appendChild(c)
+    })
+}
+
+// ── HELPERS ───────────────────────────────────────────
+function showLoader(v) {
+    document.getElementById("loader").style.display = v ? "flex" : "none"
+}
+function hideMain()  { document.getElementById("content1").style.display = "none" }
+function showMain()  { document.getElementById("content1").style.display = "flex" }
+function closeViewer(id) {
+    document.getElementById(id).style.display = "none"
+    if (id === "pdfviewer")   document.getElementById("pdfFrame").src = ""
+    if (id === "imageviewer") document.getElementById("viewedImage").src = ""
+    if (id === "videoviewer") { const v=document.getElementById("viewedVideo"); v.pause(); v.src="" }
+    if (id === "audioviewer") { const a=document.getElementById("viewedAudio"); a.pause(); a.src="" }
+    showMain()
+}
+function escapeHTML(s) {
+    return String(s)
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;").replace(/"/g,"&quot;")
+}
+function escapeAttr(s) { return escapeHTML(s).replace(/'/g,"&#039;") }
+function format(bytes) {
+    if (!bytes) return "؟"
+    bytes = Number(bytes)
+    const u = ["B","KB","MB","GB"]
+    let i = 0
+    while (bytes >= 1024 && i < 3) { bytes /= 1024; i++ }
+    return bytes.toFixed(1) + " " + u[i]
+}
+
+// ── AUTH ──────────────────────────────────────────────
+document.getElementById("login").onclick = () => {
+    if (!tokenClient) { alert("جاري تحميل Google..."); return }
+    tokenClient.requestAccessToken({ prompt: token ? "" : "consent" })
+}
+document.getElementById("refresh").onclick = () => { if (token) loadFiles() }
+setInterval(async () => {
+    if (tokenClient && Date.now() > tokenExpire - 300000)
+        tokenClient.requestAccessToken({ prompt: "none" })
+}, 60000)
+
+// ── MAIN MENU ─────────────────────────────────────────
+mainBtn.onclick = () => {
+    if (!token) { alert("سجل دخول أولاً"); return }
+    menu.style.display = menu.style.display === "block" ? "none" : "block"
+}
+document.addEventListener("click", e => {
+    if (!menu.contains(e.target) && e.target !== mainBtn)
+        menu.style.display = "none"
+})
+
+// ── CREATE TEXT FILE ──────────────────────────────────
+document.getElementById("edit_emw_file_text").onclick = () => {
+    if (!token) { alert("سجل دخول أولاً"); return }
+    menu.style.display = "none"
+    editor.innerHTML = ""
+    hideMain()
+    document.getElementById("content2").style.display = "flex"
+}
+
+// ── CREATE CSV ────────────────────────────────────────
+document.getElementById("edit_emw_file_csv").onclick = () => {
+    if (!token) { alert("سجل دخول أولاً"); return }
+    menu.style.display = "none"
+    const rows = [["الاسم","القيمة"],["عنصر 1",""],["عنصر 2",""]]
+    renderCSVTable(rows)
+    hideMain()
+    document.getElementById("csvviewer").style.display = "flex"
+}
+
+// ── CREATE LINK FILE ──────────────────────────────────
+document.getElementById("edit_emw_file_link").onclick = async () => {
+    if (!token) { alert("سجل دخول أولاً"); return }
+    menu.style.display = "none"
+    const fileName = prompt("اسم ملف الرابط")
+    if (!fileName) return
+    const link = prompt("أدخل الرابط الخارجي")
+    if (!link) return
+    await uploadJSON({ type:"external_link", url:link }, fileName + ".link")
+    loadFiles()
+}
+
+// ── TEXT EDITOR ───────────────────────────────────────
+function saveCursor() {
+    const sel = window.getSelection()
+    if (sel.rangeCount) savedRange = sel.getRangeAt(0)
+}
+editor.addEventListener("keyup",   saveCursor)
+editor.addEventListener("mouseup",  saveCursor)
+editor.addEventListener("touchend", saveCursor)
+
+function undothat()    { editor.focus(); document.execCommand("undo") }
+function openEquation() {
+    saveCursor()
+    document.getElementById("equationPanel").style.display = "block"
+    editor.style.display = "none"
+}
+function insertEquation() {
+    const latex = document.getElementById("mathInput").value
+    const span  = document.createElement("span")
+    span.className = "equation"
+    span.innerHTML = `<math-field read-only>${latex}</math-field>`
+    if (savedRange) {
+        savedRange.insertNode(span)
+        savedRange.setStartAfter(span)
+        savedRange.collapse(true)
+        const sel = window.getSelection()
+        sel.removeAllRanges()
+        sel.addRange(savedRange)
+    }
+    document.getElementById("equationPanel").style.display = "none"
+    editor.style.display = "block"
+    editor.focus()
+}
+function clearEditor() {
+    if (confirm("مسح كل المحتوى؟")) {
+        editor.innerHTML = ""
+        document.getElementById("content2").style.display = "none"
+        showMain()
+    }
+}
+async function savealldata() {
+    if (!token) { alert("سجل دخول أولاً"); return }
+    const blob = new Blob([editor.innerHTML], { type:"text/html" })
+    const name = prompt("اسم الملف", "ملف_بحث.txt") || "ملف_بحث.txt"
+    showLoader(true)
+    document.getElementById("content2").style.display = "none"
+    await uploadBlob(blob, name.endsWith(".txt") ? name : name + ".txt")
+    showLoader(false)
+    showMain()
+    loadFiles()
+}
+
+// ── UPLOAD ────────────────────────────────────────────
+document.getElementById("upload").onchange = async function() {
+    if (!token || !this.files[0]) return
+    const file = this.files[0]
+    const form = new FormData()
+    form.append("metadata", new Blob([JSON.stringify({name:file.name})],{type:"application/json"}))
+    form.append("file", file)
+    showLoader(true); hideMain()
+    await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        { method:"POST", headers:{Authorization:"Bearer "+token}, body:form })
+    this.value = ""
+    showLoader(false); showMain(); loadFiles()
+}
+
+// ── FILE OPERATIONS ───────────────────────────────────
+async function deleteFile(id) {
+    if (!confirm("حذف الملف نهائياً؟")) return
+    showLoader(true); hideMain()
+    await fetch(`https://www.googleapis.com/drive/v3/files/${id}`,
+        { method:"DELETE", headers:{Authorization:"Bearer "+token} })
+    showLoader(false); showMain(); loadFiles()
+}
+async function renameFile(id, oldName) {
+    const newName = prompt("الاسم الجديد", oldName)
+    if (!newName || newName === oldName) return
+    showLoader(true); hideMain()
+    await fetch(`https://www.googleapis.com/drive/v3/files/${id}`,
+        { method:"PATCH",
+          headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},
+          body:JSON.stringify({name:newName}) })
+    showLoader(false); showMain(); loadFiles()
+}
+function downloadFile(id) {
+    window.open(`https://drive.google.com/uc?id=${id}&export=download`)
+}
+
+// ── OPEN FILE ─────────────────────────────────────────
+async function openfile(id, name) {
+    const n = name.toLowerCase()
+    if (n.match(/\.(png|jpg|jpeg|svg|gif|webp)$/)) { await openImage(id); return }
+    if (n.match(/\.(mp4|webm|mov|avi)$/))           { await openVideo(id); return }
+    if (n.match(/\.(mp3|wav|ogg|m4a)$/))            { await openAudio(id); return }
+    if (n.endsWith(".csv"))                          { await openCSV(id);   return }
+    if (n.endsWith(".pdf"))                          { await openPDF(id, name); return }
+    if (n.endsWith(".link")) {
+        showLoader(true); hideMain()
+        try {
+            const r = await fetchMedia(id)
+            const data = JSON.parse(await r.text())
+            if (data.url) window.open(data.url, "_blank")
+        } catch(e) { alert("فشل فتح الرابط") }
+        showLoader(false); showMain(); return
+    }
+    if (n.match(/\.(txt|html?)$/)) {
+        showLoader(true); hideMain()
+        try {
+            const r = await fetchMedia(id)
+            editor.innerHTML = await r.text()
+            showLoader(false)
+            document.getElementById("content2").style.display = "flex"
+        } catch(e) { alert("فشل فتح الملف"); showLoader(false); showMain() }
+        return
+    }
+    alert("نوع الملف غير مدعوم للعرض، يمكنك تحميله")
+}
+
+async function openPDF(id, name) {
+    showLoader(true); hideMain()
+    try {
+        const r = await fetchMedia(id)
+        document.getElementById("pdfFrame").src = URL.createObjectURL(await r.blob())
+        document.getElementById("pdfName").textContent = name || ""
+        showLoader(false)
+        document.getElementById("pdfviewer").style.display = "flex"
+    } catch(e) { alert("فشل فتح PDF"); showLoader(false); showMain() }
+}
+async function openImage(id) {
+    showLoader(true); hideMain()
+    try {
+        const r = await fetchMedia(id)
+        document.getElementById("viewedImage").src = URL.createObjectURL(await r.blob())
+        showLoader(false)
+        document.getElementById("imageviewer").style.display = "flex"
+    } catch(e) { alert("فشل فتح الصورة"); showLoader(false); showMain() }
+}
+async function openVideo(id) {
+    showLoader(true); hideMain()
+    try {
+        const r = await fetchMedia(id)
+        document.getElementById("viewedVideo").src = URL.createObjectURL(await r.blob())
+        showLoader(false)
+        document.getElementById("videoviewer").style.display = "flex"
+    } catch(e) { alert("فشل تشغيل الفيديو"); showLoader(false); showMain() }
+}
+async function openAudio(id) {
+    showLoader(true); hideMain()
+    try {
+        const r = await fetchMedia(id)
+        document.getElementById("viewedAudio").src = URL.createObjectURL(await r.blob())
+        showLoader(false)
+        document.getElementById("audioviewer").style.display = "flex"
+    } catch(e) { alert("فشل تشغيل الصوت"); showLoader(false); showMain() }
+}
+async function openCSV(id) {
+    showLoader(true); hideMain()
+    try {
+        const r = await fetchMedia(id)
+        renderCSVTable(parseCSV(await r.text()))
+        showLoader(false)
+        document.getElementById("csvviewer").style.display = "flex"
+    } catch(e) { alert("فشل فتح CSV"); showLoader(false); showMain() }
+}
+
+function fetchMedia(id) {
+    return fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
+        { headers: { Authorization: "Bearer " + token } })
+}
+
+// ── CSV ───────────────────────────────────────────────
+function renderCSVTable(rows) {
+    if (!rows.length) return
+    let html = `<div class="tablewrapper"><table class="realtable"><thead><tr>`
+    rows[0].forEach(col => html += `<th contenteditable="true">${escapeHTML(col)}</th>`)
+    html += `</tr></thead><tbody>`
+    for (let i = 1; i < rows.length; i++) {
+        html += "<tr>"
+        rows[i].forEach(cell => html += `<td contenteditable="true">${escapeHTML(cell)}</td>`)
+        html += "</tr>"
+    }
+    html += `</tbody></table></div>`
+    document.getElementById("csvTable").innerHTML = html
+}
+async function saveCSV() {
+    const table = document.querySelector(".realtable")
+    const csv   = [...table.rows].map(r => [...r.cells].map(c => c.innerText.trim()).join(";")).join("\n")
+    const name  = prompt("اسم الجدول", "جدول_بيانات.csv") || "جدول_بيانات.csv"
+    showLoader(true)
+    document.getElementById("csvviewer").style.display = "none"
+    await uploadBlob(new Blob([csv],{type:"text/csv"}), name.endsWith(".csv")?name:name+".csv")
+    showLoader(false); showMain(); loadFiles()
+}
+document.getElementById("addRowBtn").onclick = () => {
+    const t = document.querySelector(".realtable"); if (!t) return
+    const cols = t.querySelectorAll("thead th").length
+    const tr = document.createElement("tr")
+    for (let i = 0; i < cols; i++) {
+        const td = document.createElement("td")
+        td.contentEditable = "true"; tr.appendChild(td)
+    }
+    t.querySelector("tbody").appendChild(tr)
+}
+document.getElementById("addColBtn").onclick = () => {
+    const t = document.querySelector(".realtable"); if (!t) return
+    const th = document.createElement("th"); th.contentEditable="true"; th.innerText="عمود جديد"
+    t.querySelector("thead tr").appendChild(th)
+    t.querySelectorAll("tbody tr").forEach(row => {
+        const td = document.createElement("td"); td.contentEditable="true"; row.appendChild(td)
+    })
+}
+
+// ── UPLOAD HELPERS ────────────────────────────────────
+async function uploadBlob(blob, name) {
+    const form = new FormData()
+    form.append("metadata", new Blob([JSON.stringify({name})],{type:"application/json"}))
+    form.append("file", blob)
+    await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        { method:"POST", headers:{Authorization:"Bearer "+token}, body:form })
+}
+async function uploadJSON(data, name) {
+    await uploadBlob(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}), name)
+}
+
+// ── CSV PARSER ────────────────────────────────────────
+function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/)
+    if (!lines.length) return []
+    const first = lines[0]
+    const delim = first.includes(";") ? ";" : first.includes("\t") ? "\t" : ","
+    return lines.map(line => {
+        const result=[]; let cur=""; let inQ=false
+        for (const ch of line) {
+            if (ch==='"') inQ=!inQ
+            else if (ch===delim && !inQ) { result.push(cur.trim()); cur="" }
+            else cur+=ch
+        }
+        result.push(cur.trim()); return result
+    })
+}
+</script>
+
+<script src="https://accounts.google.com/gsi/client" onload="googleLoaded()"></script>
+<script src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+</body>
+</html>
